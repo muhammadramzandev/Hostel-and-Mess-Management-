@@ -1,0 +1,114 @@
+rules_version = '2';
+service cloud.firestore {
+ match /databases/{database}/documents {
+  function signed() { return request.auth != null; }
+  function userPath(uid) { return /databases/$(database)/documents/users/$(uid); }
+  function hostelPath(hid) { return /databases/$(database)/documents/hostels/$(hid); }
+  function hasProfile() { return signed() && exists(userPath(request.auth.uid)); }
+  function me() { return get(userPath(request.auth.uid)).data; }
+  function active() { return hasProfile() && me().status == 'active'; }
+  function sameHostel(hid) { return active() && me().hostelId == hid; }
+  function owner(hid) { return sameHostel(hid) && me().role == 'admin'; }
+  function staff(hid) { return sameHostel(hid) && me().role in ['admin','warden','accountant','messManager']; }
+  function tenantData(hid) { return request.resource.data.hostelId == hid; }
+
+  match /hostels/{hid} {
+   // Admin/hostel provisioning is deliberately not allowed from the public web client.
+   allow create, delete: if false;
+   allow get: if sameHostel(hid);
+   allow list: if false;
+   allow update: if owner(hid)
+     && request.resource.data.ownerUid == resource.data.ownerUid
+     && request.resource.data.hostelId == resource.data.hostelId
+     && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['hostelName','updatedAt','status']);
+
+   match /{coll}/{docId} {
+    // Invitation: intended staff member can fetch only their own unused invite; only owner can list.
+    allow get: if signed() && coll == 'invitations' && resource.data.hostelId == hid && resource.data.email == request.auth.token.email && resource.data.used == false;
+    allow list: if sameHostel(hid) && coll == 'invitations' && owner(hid);
+    allow read: if sameHostel(hid) && coll != 'invitations' && (
+      (coll == 'users' && (resource.data.uid == request.auth.uid || me().role == 'admin' || (me().role == 'warden' && resource.data.role in ['student','parent']))) ||
+      (coll in ['students','rooms','attendance'] && me().role in ['admin','warden']) ||
+      (coll == 'fees' && me().role in ['admin','accountant']) ||
+      (coll == 'expenses' && me().role in ['admin','accountant','messManager']) ||
+      (coll == 'mess' && me().role in ['admin','warden','accountant','messManager','student','parent']) ||
+      (coll == 'inventory' && me().role in ['admin','messManager']) ||
+      (coll == 'complaints' && (me().role in ['admin','warden'] || resource.data.createdBy == request.auth.uid)) ||
+      (coll == 'announcements' && me().role in ['admin','warden','accountant','messManager','student','parent'])
+    );
+
+    // User profile mirror: public signup can never create an admin profile.
+    allow create: if signed() && coll == 'users' && docId == request.auth.uid
+      && request.resource.data.uid == request.auth.uid
+      && request.resource.data.hostelId == hid
+      && request.resource.data.role in ['warden','accountant','messManager','student','parent']
+      && request.resource.data.status == 'pending'
+      && getAfter(userPath(request.auth.uid)).data.hostelId == hid
+      && getAfter(userPath(request.auth.uid)).data.role == request.resource.data.role
+      && getAfter(userPath(request.auth.uid)).data.status == 'pending'
+      && exists(hostelPath(hid)) && get(hostelPath(hid)).data.status == 'active'
+      && (
+        !(request.resource.data.role in ['warden','accountant','messManager']) ||
+        (
+          request.resource.data.invitationCode is string
+          && getAfter(/databases/$(database)/documents/hostels/$(hid)/invitations/$(request.resource.data.invitationCode)).data.used == true
+          && getAfter(/databases/$(database)/documents/hostels/$(hid)/invitations/$(request.resource.data.invitationCode)).data.usedBy == request.auth.uid
+          && getAfter(/databases/$(database)/documents/hostels/$(hid)/invitations/$(request.resource.data.invitationCode)).data.email == request.auth.token.email
+          && getAfter(/databases/$(database)/documents/hostels/$(hid)/invitations/$(request.resource.data.invitationCode)).data.role == request.resource.data.role
+        )
+      );
+
+    allow create: if sameHostel(hid) && tenantData(hid) && (
+      (coll == 'invitations' && owner(hid)) ||
+      (coll in ['students','rooms','attendance'] && me().role in ['admin','warden']) ||
+      (coll == 'fees' && me().role in ['admin','accountant']) ||
+      (coll == 'expenses' && me().role in ['admin','accountant','messManager']) ||
+      (coll == 'mess' && me().role in ['admin','messManager']) ||
+      (coll == 'inventory' && me().role in ['admin','messManager']) ||
+      (coll == 'complaints' && me().role in ['admin','warden','student','parent']) ||
+      (coll == 'announcements' && me().role in ['admin','warden'])
+    );
+
+    allow update: if (
+      // Staff invitation can be consumed only by its bound email and matching UID.
+      (signed() && coll == 'invitations' && resource.data.email == request.auth.token.email && resource.data.used == false && request.resource.data.used == true && request.resource.data.usedBy == request.auth.uid && request.resource.data.role == resource.data.role && request.resource.data.email == resource.data.email && request.resource.data.hostelId == hid && getAfter(userPath(request.auth.uid)).data.hostelId == hid && getAfter(userPath(request.auth.uid)).data.role == resource.data.role && getAfter(userPath(request.auth.uid)).data.status == 'pending' && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['used','usedBy','usedAt']))
+      ||
+      (sameHostel(hid) && (
+        (coll == 'users' && owner(hid) && request.resource.data.hostelId == hid && request.resource.data.uid == resource.data.uid && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','approvedBy','approvedAt','name','email','role','hostelName'])) ||
+        (coll == 'invitations' && owner(hid) && request.resource.data.hostelId == hid && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['used','usedBy','usedAt','email','role','hostelId','createdBy','createdAt'])) ||
+        (coll in ['students','rooms','attendance'] && me().role in ['admin','warden'] && tenantData(hid)) ||
+        (coll == 'fees' && me().role in ['admin','accountant'] && tenantData(hid)) ||
+        (coll == 'expenses' && me().role in ['admin','accountant','messManager'] && tenantData(hid)) ||
+        (coll == 'mess' && me().role in ['admin','messManager'] && tenantData(hid)) ||
+        (coll == 'inventory' && me().role in ['admin','messManager'] && tenantData(hid)) ||
+        (coll == 'complaints' && (me().role in ['admin','warden'] || (resource.data.createdBy == request.auth.uid && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['subject','category','description','priority','updatedAt'])))) ||
+        (coll == 'announcements' && me().role in ['admin','warden'] && tenantData(hid))
+      ))
+    );
+
+    allow delete: if sameHostel(hid) && (
+      (coll in ['students','rooms','fees','expenses','mess','inventory','attendance','announcements'] && me().role == 'admin') ||
+      (coll == 'complaints' && me().role in ['admin','warden']) ||
+      (coll == 'invitations' && owner(hid))
+    );
+   }
+  }
+
+  match /users/{uid} {
+   allow get: if signed() && request.auth.uid == uid;
+   allow list: if false;
+   // Only non-admin users can self-register. Admins are provisioned manually by the owner.
+   allow create: if signed() && request.auth.uid == uid
+     && request.resource.data.uid == uid
+     && request.resource.data.role in ['warden','accountant','messManager','student','parent']
+     && request.resource.data.status == 'pending'
+     && request.resource.data.hostelId is string
+     && exists(hostelPath(request.resource.data.hostelId))
+     && get(hostelPath(request.resource.data.hostelId)).data.status == 'active'
+     && request.resource.data.diff({}).affectedKeys().hasOnly(['uid','name','email','role','hostelId','hostelName','status','phone','parentStudentUid','invitationCode','createdAt']);
+   allow update: if signed() && request.auth.uid == uid && resource.data.uid == uid
+     && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name']);
+   allow delete: if false;
+  }
+ }
+}

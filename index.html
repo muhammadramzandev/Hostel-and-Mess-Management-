@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>HostelPro — Secure Hostel Management</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body class="auth-body">
+<div class="auth-shell">
+  <section class="auth-brand">
+    <div class="brand-mark">HP</div><div class="eyebrow">HOSTEL & MESS OPERATIONS</div>
+    <h1>One platform.<br><span>Every hostel.</span></h1>
+    <p>Manage residents, rooms, payments, meals, inventory and teams from a secure multi-hostel workspace.</p>
+    <div class="auth-points"><span>✓ Separate hostel workspaces</span><span>✓ Role-based dashboards</span><span>✓ Centralized reports</span></div>
+    <div class="brand-footer">HOSTELPRO • OPERATIONS SUITE</div>
+  </section>
+  <main class="auth-card">
+    <div class="mobile-brand"><div class="brand-mark">HP</div><b>HostelPro</b></div>
+    <div class="tabs"><button class="tab active" data-tab="login">Sign in</button><button class="tab" data-tab="register">Create account</button></div>
+    <div id="authMessage" class="notice hidden"></div>
+    <form id="loginForm">
+      <h2>Welcome back</h2><p class="muted">Sign in with your email and password.</p>
+      <label>Email address<input name="email" type="email" autocomplete="email" required placeholder="you@example.com"></label>
+      <label>Password<input name="password" type="password" autocomplete="current-password" required minlength="6" placeholder="Your password"></label>
+      <button class="btn primary full" type="submit">Sign in <span>→</span></button>
+      <button type="button" class="text-button" id="forgotBtn">Forgot password?</button>
+    </form>
+    <form id="registerForm" class="hidden">
+      <h2>Create your account</h2><p class="muted">Register as a student, parent, or invited staff member.</p>
+      <label>Account type<select name="role" id="regRole" required>
+        
+        <option value="warden">Warden</option><option value="accountant">Accountant</option>
+        <option value="messManager">Mess Manager</option><option value="student">Student</option><option value="parent">Parent</option>
+      </select></label>
+      
+      <div id="hostelIdWrap" class="hidden"><label>Hostel ID<input name="hostelId" id="hostelId" maxlength="32" placeholder="Enter the ID given by your hostel admin"></label><small class="help">Ask your hostel admin for the exact Hostel ID.</small></div>
+      <label>Full name<input name="name" required maxlength="100" autocomplete="name" placeholder="Your full name"></label>
+      <label>Email address<input name="email" type="email" required autocomplete="email" placeholder="you@example.com"></label>
+      <label>Phone (optional)<input name="phone" type="tel" maxlength="30" placeholder="+92..."></label>
+      <div id="inviteWrap" class="hidden"><label>Staff invitation code<input name="inviteCode" id="inviteCode" maxlength="40" placeholder="Code provided by your admin"></label></div>
+      <label>Password<input name="password" type="password" required minlength="8" autocomplete="new-password" placeholder="At least 8 characters"></label>
+      <label>Confirm password<input name="confirmPassword" type="password" required minlength="8" autocomplete="new-password" placeholder="Repeat password"></label>
+      <div id="studentIdWrap" class="hidden"><label>Student ID (for parent account)<input name="studentId" id="studentLink" placeholder="Student's ID provided by the hostel"></label></div>
+      <button class="btn primary full" type="submit">Create account <span>→</span></button>
+      <p class="fine-print">Admin accounts are created privately by the system owner. Other users need their hostel ID. Staff require an invitation and admin approval.</p>
+    </form>
+    <div class="auth-bottom">By continuing, you agree to follow your hostel's account and data-access policies.</div>
+  </main>
+</div>
+<script type="module" src="auth.js"></script>
+</body></html>

@@ -1,0 +1,13 @@
+{
+  "name": "hostelpro-multitenant",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "serve": "firebase emulators:start --only hosting,firestore,auth",
+    "deploy": "firebase deploy --only hosting,firestore:rules,firestore:indexes"
+  },
+  "devDependencies": {
+    "firebase-tools": "^13.29.2"
+  }
+}
