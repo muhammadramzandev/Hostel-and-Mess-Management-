@@ -1,28 +1,281 @@
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
-import { getAuth, onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
-import { getFirestore, collection, doc, getDoc, getDocs, addDoc, setDoc, updateDoc, deleteDoc, query, where, orderBy, limit, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js';
-import { firebaseConfig, CONFIGURED } from './firebase-config.js';
-const ROLE=document.body.dataset.role, $=s=>document.querySelector(s); let app,auth,db,profile,uid; const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const configNotice=()=>{if(!CONFIGURED){$('#mainContent').innerHTML='<div class="config-banner"><b>Firebase setup required.</b> Open <code>js/firebase-config.js</code> and fill the Web App configuration fields. Then enable Email/Password Authentication, create Firestore, and deploy <code>firestore.rules</code>.</div>';return true;}return false;};
-const meta={admin:{title:'Admin Console',desc:'Complete hostel operations and organization settings',nav:[['overview','▦','Overview'],['users','♙','User approvals'],['students','♟','Students'],['rooms','▤','Rooms'],['fees','＄','Fees & payments'],['mess','♨','Mess management'],['inventory','▣','Inventory'],['expenses','↗','Expenses'],['staff','♧','Staff & invitations'],['complaints','☏','Complaints'],['announcements','✦','Announcements'],['reports','▥','Reports'],['settings','⚙','Hostel settings']]},warden:{title:'Warden Panel',desc:'Admissions, rooms, attendance and student welfare',nav:[['overview','▦','Overview'],['students','♟','Students'],['rooms','▤','Rooms'],['attendance','✓','Attendance'],['complaints','☏','Complaints'],['announcements','✦','Announcements']]},accountant:{title:'Accounts Desk',desc:'Fee collection, balances and expense tracking',nav:[['overview','▦','Overview'],['fees','＄','Fees & payments'],['expenses','↗','Expenses'],['reports','▥','Financial reports']]},messManager:{title:'Mess Operations',desc:'Menu, meal records, stock and food expenses',nav:[['overview','▦','Overview'],['mess','♨','Mess menu & meals'],['inventory','▣','Inventory'],['expenses','↗','Expenses']]},student:{title:'Student Portal',desc:'Your room, fees, mess and hostel requests',nav:[['overview','▦','Overview'],['myprofile','♙','My profile'],['myfees','＄','My fees'],['mess','♨','Mess menu'],['complaints','☏','My complaints'],['announcements','✦','Announcements']]},parent:{title:'Parent Portal',desc:'Stay updated on your linked student',nav:[['overview','▦','Overview'],['myprofile','♙','Student profile'],['myfees','＄','Fees & payments'],['mess','♨','Mess menu'],['complaints','☏','Contact warden'],['announcements','✦','Announcements']]}};
-const tables={students:{label:'Students',fields:[['name','Full name','text'],['studentId','Admission / Student ID','text'],['email','Email','email'],['phone','Phone','text'],['room','Room number','text'],['guardianName','Parent / guardian','text'],['guardianPhone','Guardian phone','text'],['admissionDate','Admission date','date'],['status','Status','select:active,inactive,pending']]},rooms:{label:'Rooms',fields:[['roomNo','Room number','text'],['block','Block / floor','text'],['capacity','Capacity','number'],['occupied','Occupied beds','number'],['type','Room type','select:Standard,AC,Shared,Private'],['monthlyRent','Monthly rent','number'],['status','Status','select:Available,Full,Maintenance']]},fees:{label:'Fees & payments',fields:[['studentUid','Student UID','text'],['studentName','Student name','text'],['feeType','Fee type','select:Tuition,Room,Mess,Admission,Other'],['amount','Amount','number'],['paid','Paid amount','number'],['dueDate','Due date','date'],['month','Month / period','text'],['status','Status','select:Unpaid,Partial,Paid']]},mess:{label:'Mess menu & meals',fields:[['date','Date','date'],['breakfast','Breakfast','text'],['lunch','Lunch','text'],['dinner','Dinner','text'],['notes','Notes / allergens','text']]},inventory:{label:'Inventory',fields:[['item','Item name','text'],['category','Category','text'],['quantity','Quantity','number'],['unit','Unit','text'],['reorderLevel','Reorder level','number'],['unitCost','Unit cost','number'],['supplier','Supplier','text']]},expenses:{label:'Expenses',fields:[['date','Date','date'],['category','Category','select:Food,Maintenance,Utilities,Salary,Medical,Other'],['description','Description','text'],['amount','Amount','number'],['paidTo','Paid to','text'],['receiptNo','Receipt / reference','text']]},complaints:{label:'Complaints & requests',fields:[['subject','Subject','text'],['category','Category','select:Room,Maintenance,Mess,Fees,Security,Other'],['description','Description','textarea'],['priority','Priority','select:Low,Normal,High'],['status','Status','select:Open,In progress,Resolved']]},announcements:{label:'Announcements',fields:[['title','Title','text'],['body','Message','textarea'],['audience','Audience','select:Everyone,Students,Parents,Staff'],['expiresAt','Expiry date','date']]},attendance:{label:'Attendance',fields:[['studentUid','Student UID','text'],['studentName','Student name','text'],['date','Date','date'],['status','Attendance','select:Present,Absent,Leave'],['notes','Notes','text']]},staff:{label:'Staff & invitations',fields:[['name','Staff name','text'],['email','Staff email','email'],['role','Role','select:warden,accountant,messManager'],['inviteCode','Invitation code','text'],['status','Status','select:active,pending,disabled']]}};
-const permissions={admin:Object.keys(tables),warden:['students','rooms','attendance','complaints','announcements'],accountant:['fees','expenses'],messManager:['mess','inventory','expenses'],student:['complaints','announcements','mess'],parent:['complaints','announcements','mess']};
-if(configNotice()){}else{app=initializeApp(firebaseConfig);auth=getAuth(app);db=getFirestore(app);onAuthStateChanged(auth,async u=>{if(!u){location.href='index.html';return;}uid=u.uid;try{const s=await getDoc(doc(db,'users',uid));if(!s.exists()||s.data().status!=='active'||s.data().role!==ROLE){await signOut(auth);location.href='index.html';return;}profile=s.data();renderShell();await showView('overview');}catch(e){$('#mainContent').innerHTML='<div class="alert">Could not load your profile. Check Firebase configuration and security rules. '+esc(e.message)+'</div>';}});}
-function renderShell(){const m=meta[ROLE];$('#brandName').textContent=profile.hostelName||'HostelPro';$('#brandMeta').textContent=m.title;$('#pageTitle').textContent=m.title;$('#pageDesc').textContent=m.desc;$('#userName').textContent=profile.name||'User';$('#userRole').textContent=ROLE==='messManager'?'Mess Manager':ROLE[0].toUpperCase()+ROLE.slice(1);$('#avatar').textContent=(profile.name||'U').split(/\s+/).map(x=>x[0]).slice(0,2).join('').toUpperCase();$('#navList').innerHTML=m.nav.map(([id,icon,label],i)=>`<button class="nav-link ${i===0?'active':''}" data-view="${id}"><span class="nav-icon">${icon}</span>${label}</button>`).join('');document.querySelectorAll('[data-view]').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('[data-view]').forEach(x=>x.classList.toggle('active',x===b));showView(b.dataset.view);$('#sidebar').classList.remove('open');$('#mobileOverlay').classList.remove('show');}));$('#logoutBtn').addEventListener('click',async()=>{await signOut(auth);location.href='index.html';});$('#menuToggle').addEventListener('click',()=>{$('#sidebar').classList.add('open');$('#mobileOverlay').classList.add('show');});$('#mobileOverlay').addEventListener('click',()=>{$('#sidebar').classList.remove('open');$('#mobileOverlay').classList.remove('show');});}
-async function readCol(name,extra=[]){let ref=collection(db,'hostels',profile.hostelId,name);let q=query(ref,where('hostelId','==',profile.hostelId),...extra);const snap=await getDocs(q);return snap.docs.map(d=>({id:d.id,...d.data()}));}
-async function showView(view){$('#pageTitle').textContent=(meta[ROLE].nav.find(x=>x[0]===view)||[view,'',view])[2];$('#pageDesc').textContent=`${profile.hostelName||'Hostel'} · ${meta[ROLE].desc}`;const host=$('#mainContent');host.innerHTML='<div class="empty">Loading data…</div>';try{if(view==='overview'){await dashboard();return;}if(view==='settings'){settings();return;}if(view==='users'){await approvals();return;}if(view==='staff'){await staffView();return;}if(view==='reports'){await reports();return;}if(view==='myprofile'){await myProfile();return;}if(view==='myfees'){await myFees();return;}if(!permissions[ROLE].includes(view)){host.innerHTML='<div class="alert">This section is not available for your role.</div>';return;}await tableView(view);}catch(e){host.innerHTML=`<div class="alert">Could not load this section: ${esc(e.message)}. Confirm Firestore rules and indexes are deployed.</div>`;}}
-async function dashboard(){const host=$('#mainContent');let data={};for(const k of (permissions[ROLE]||[])){try{data[k]=await readCol(k)}catch{data[k]=[]}}const studentCount=(data.students||[]).length, roomCount=(data.rooms||[]).length, fees=(data.fees||[]), feeDue=fees.reduce((a,x)=>a+Math.max(0,Number(x.amount||0)-Number(x.paid||0)),0), expenses=(data.expenses||[]).reduce((a,x)=>a+Number(x.amount||0),0);let cards=[];if(ROLE==='admin'||ROLE==='warden')cards=[['Students',studentCount,'♟'],['Rooms',roomCount,'▤'],['Open complaints',(data.complaints||[]).filter(x=>x.status!=='Resolved').length,'☏'],['Pending approvals','—','✓']];else if(ROLE==='accountant')cards=[['Fee records',fees.length,'＄'],['Outstanding balance',money(feeDue),'↘'],['Expenses',money(expenses),'↗'],['Payments received',money(fees.reduce((a,x)=>a+Number(x.paid||0),0)),'✓']];else if(ROLE==='messManager')cards=[['Menu records',(data.mess||[]).length,'♨'],['Inventory items',(data.inventory||[]).length,'▣'],['Low stock',(data.inventory||[]).filter(x=>Number(x.quantity||0)<=Number(x.reorderLevel||0)).length,'!'],['Food / other expenses',money(expenses),'↗']];else cards=[['Hostel',profile.hostelName||'—','⌂'],['Account status','Active','✓'],['Mess menu',(data.mess||[]).length,'♨'],['Open requests',(data.complaints||[]).filter(x=>x.createdBy===uid&&x.status!=='Resolved').length,'☏']];host.innerHTML=`<div class="welcome"><div><h2>Good day, ${esc(profile.name?.split(' ')[0]||'there')} 👋</h2><p>Here’s your ${ROLE==='admin'?'hostel overview':ROLE==='student'?'student portal':ROLE==='parent'?'parent portal':'operations overview'}.</p></div><div class="hostel-badge">HOSTEL ID <strong>${esc(profile.hostelId)}</strong></div></div><div class="stats-grid">${cards.map(c=>`<div class="stat-card"><div class="stat-top">${esc(c[0])}<span class="stat-icon">${c[2]}</span></div><div class="stat-value">${esc(c[1])}</div><div class="stat-foot">Live data from your hostel</div></div>`).join('')}</div><div class="grid-two"><section class="panel"><div class="panel-head"><div><h3>Quick actions</h3><p class="panel-sub">Jump to your most-used tools</p></div></div><div class="panel-body"><div class="quick-grid">${meta[ROLE].nav.filter(x=>x[0]!=='overview').slice(0,6).map(x=>`<button class="quick" data-quick="${x[0]}"><span>${x[1]}</span><strong>${esc(x[2])}</strong><small>Open section →</small></button>`).join('')}</div></div></section><section class="panel"><div class="panel-head"><div><h3>Hostel information</h3><p class="panel-sub">Your account's organization</p></div></div><div class="panel-body"><div class="activity"><div class="activity-row"><span class="activity-dot">⌂</span><div><strong>${esc(profile.hostelName||'Hostel')}</strong><small>Organization name</small></div></div><div class="activity-row"><span class="activity-dot">♙</span><div><strong>${esc(profile.name||'')}</strong><small>${esc(ROLE)} · ${esc(profile.email||'')}</small></div></div><div class="activity-row"><span class="activity-dot">🔒</span><div><strong>Hostel data isolation</strong><small>All records are scoped to this hostel ID.</small></div></div></div></div></section></div><section class="panel"><div class="panel-head"><div><h3>Recent records</h3><p class="panel-sub">Latest records available to your role</p></div></div><div class="table-wrap"><table><thead><tr><th>SECTION</th><th>RECORDS</th><th>STATUS</th></tr></thead><tbody>${Object.entries(data).map(([k,v])=>`<tr><td>${esc(tables[k]?.label||k)}</td><td>${v.length}</td><td><span class="status">Loaded</span></td></tr>`).join('')||'<tr><td colspan="3" class="empty">No records yet.</td></tr>'}</tbody></table></div></section>`;host.querySelectorAll('[data-quick]').forEach(b=>b.onclick=()=>{document.querySelectorAll('[data-view]').forEach(x=>x.classList.toggle('active',x.dataset.view===b.dataset.quick));showView(b.dataset.quick);});}
-function money(n){return new Intl.NumberFormat('en-PK',{style:'currency',currency:'PKR',maximumFractionDigits:0}).format(Number(n)||0)}
-async function tableView(key){let rows=await readCol(key);if(['student','parent'].includes(ROLE)){rows=rows.filter(r=>r.createdBy===uid||r.studentUid===uid||r.parentStudentUid===uid);if(key==='mess'||key==='announcements')rows=await readCol(key);}if(key==='complaints'&&ROLE==='student')rows=rows.filter(r=>r.createdBy===uid);if(key==='complaints'&&ROLE==='parent')rows=rows.filter(r=>r.createdBy===uid);const def=tables[key];const host=$('#mainContent');host.innerHTML=`<section class="panel"><div class="panel-head"><div><h3>${esc(def.label)}</h3><p class="panel-sub">${rows.length} record(s) · scoped to ${esc(profile.hostelName||'your hostel')}</p></div>${canCreate(key)?'<button class="btn-sm primary" id="addBtn">＋ Add record</button>':''}</div><div class="panel-body"><div class="toolbar"><input id="searchRows" placeholder="Search records…"><button class="btn-sm" id="exportBtn">Export CSV</button></div><div class="table-wrap"><table><thead><tr>${def.fields.slice(0,6).map(f=>`<th>${esc(f[1].toUpperCase())}</th>`).join('')}<th>STATUS</th>${canEdit(key)?'<th>ACTIONS</th>':''}</tr></thead><tbody id="rowsBody">${rowsHtml(rows,def,key)}</tbody></table></div></div></section>`;$('#searchRows').oninput=()=>{let term=$('#searchRows').value.toLowerCase();$('#rowsBody').innerHTML=rowsHtml(rows.filter(r=>JSON.stringify(r).toLowerCase().includes(term)),def,key);bindRowActions(key,rows,def);};$('#exportBtn').onclick=()=>csvExport(rows,def.label);if($('#addBtn'))$('#addBtn').onclick=()=>openForm(key,def);bindRowActions(key,rows,def);}
-function rowsHtml(rows,def,key){if(!rows.length)return `<tr><td colspan="${def.fields.length+2}" class="empty">No records yet. ${canCreate(key)?'Use Add record to create the first one.':''}</td></tr>`;return rows.map(r=>`<tr>${def.fields.slice(0,6).map(f=>`<td>${esc(r[f[0]]??'—')}</td>`).join('')}<td><span class="status ${String(r.status||'active').toLowerCase().replace(/\s/g,'')}">${esc(r.status||'Recorded')}</span></td>${canEdit(key)?`<td><button class="btn-sm" data-edit="${esc(r.id)}">Edit</button> <button class="btn-sm" data-delete="${esc(r.id)}">Delete</button></td>`:''}</tr>`).join('');}
-function bindRowActions(key,rows,def){document.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>openForm(key,def,rows.find(r=>r.id===b.dataset.edit)));document.querySelectorAll('[data-delete]').forEach(b=>b.onclick=async()=>{if(!confirm('Delete this record? This cannot be undone.'))return;await deleteDoc(doc(db,'hostels',profile.hostelId,key,b.dataset.delete));await showView(key);});}
-function canCreate(key){if(ROLE==='student'||ROLE==='parent')return key==='complaints';return (permissions[ROLE]||[]).includes(key)&&!['announcements'].includes(key)||ROLE==='admin'&&key==='announcements';}function canEdit(key){return ROLE==='admin'||ROLE==='warden'&&['students','rooms','attendance','complaints','announcements'].includes(key)||ROLE==='accountant'&&['fees','expenses'].includes(key)||ROLE==='messManager'&&['mess','inventory','expenses'].includes(key)||(['student','parent'].includes(ROLE)&&key==='complaints');}
-function openForm(key,def,row={}){const fields=def.fields.filter(f=>!(ROLE==='student'||ROLE==='parent')||!['status'].includes(f[0]));const wrap=document.createElement('div');wrap.className='modal-backdrop';wrap.innerHTML=`<section class="modal"><h2>${row.id?'Edit':'Add'} ${esc(def.label.replace(/s$/,''))}</h2><p>Data is saved under your hostel ID. Do not enter another hostel's records.</p><form id="recordForm" class="modal-form">${fields.map(f=>`<label class="${f[2]==='textarea'?'full':''}">${esc(f[1])}${f[2].startsWith('select:')?`<select name="${f[0]}">${f[2].slice(7).split(',').map(o=>`<option ${row[f[0]]===o?'selected':''}>${esc(o)}</option>`).join('')}</select>`:f[2]==='textarea'?`<textarea name="${f[0]}" rows="3">${esc(row[f[0]]||'')}</textarea>`:`<input name="${f[0]}" type="${f[2]}" value="${esc(row[f[0]]||'')}" ${['amount','paid','capacity','occupied','quantity','reorderLevel','unitCost','monthlyRent'].includes(f[0])?'min="0"':''}>`}</label>`).join('')}</form><div class="modal-actions"><button class="btn-sm" id="cancelModal">Cancel</button><button class="btn primary" id="saveModal">Save record</button></div><div id="formMsg" class="message"></div></section>`;document.body.append(wrap);$('#cancelModal').onclick=()=>wrap.remove();$('#saveModal').onclick=async()=>{const b=$('#saveModal');b.disabled=true;try{const fd=new FormData($('#recordForm')),data={};for(const [k,v] of fd.entries())data[k]=v.trim();for(const k of ['amount','paid','capacity','occupied','quantity','reorderLevel','unitCost','monthlyRent'])if(data[k]!==undefined)data[k]=Number(data[k]||0);data.hostelId=profile.hostelId;data.hostelName=profile.hostelName;data.updatedAt=serverTimestamp();if(!row.id){data.createdAt=serverTimestamp();data.createdBy=uid;data.createdByRole=ROLE;}if(key==='complaints'&&!row.id){data.status='Open';data.priority=data.priority||'Normal';}if(row.id)await updateDoc(doc(db,'hostels',profile.hostelId,key,row.id),data);else await addDoc(collection(db,'hostels',profile.hostelId,key),data);wrap.remove();await showView(key);}catch(e){$('#formMsg').textContent=e.message;b.disabled=false;}};}
-async function approvals(){const host=$('#mainContent');const users=await readCol('users');host.innerHTML=`<section class="panel"><div class="panel-head"><div><h3>Account approvals</h3><p class="panel-sub">Approve users only after verifying their identity and role.</p></div></div><div class="panel-body"><div class="table-wrap"><table><thead><tr><th>NAME</th><th>EMAIL</th><th>ROLE</th><th>STATUS</th><th>ACTION</th></tr></thead><tbody>${users.filter(x=>x.uid!==uid).map(u=>`<tr><td>${esc(u.name)}</td><td>${esc(u.email)}</td><td>${esc(u.role)}</td><td><span class="status ${u.status==='pending'?'pending':''}">${esc(u.status)}</span></td><td>${u.status==='pending'?`<button class="btn-sm primary" data-approve="${esc(u.id)}">Approve</button> <button class="btn-sm" data-reject="${esc(u.id)}">Reject</button>`:'—'}</td></tr>`).join('')||'<tr><td colspan="5" class="empty">No pending users.</td></tr>'}</tbody></table></div><p class="fine">For security, users are approved through the user profile stored inside this hostel. Never approve an unverified parent link.</p></div></section>`;host.querySelectorAll('[data-approve]').forEach(b=>b.onclick=async()=>{await updateDoc(doc(db,'hostels',profile.hostelId,'users',b.dataset.approve),{status:'active',approvedBy:uid,approvedAt:serverTimestamp()});await showView('users');});host.querySelectorAll('[data-reject]').forEach(b=>b.onclick=async()=>{await updateDoc(doc(db,'hostels',profile.hostelId,'users',b.dataset.reject),{status:'rejected',approvedBy:uid});await showView('users');});}
-async function staffView(){const host=$('#mainContent');const users=await readCol('users');const inv=await readCol('invitations');host.innerHTML=`<div class="grid-two"><section class="panel"><div class="panel-head"><div><h3>Staff accounts</h3><p class="panel-sub">Warden, accountant and mess manager</p></div></div><div class="table-wrap"><table><thead><tr><th>NAME</th><th>EMAIL</th><th>ROLE</th><th>STATUS</th></tr></thead><tbody>${users.filter(x=>['warden','accountant','messManager'].includes(x.role)).map(u=>`<tr><td>${esc(u.name)}</td><td>${esc(u.email)}</td><td>${esc(u.role)}</td><td>${esc(u.status)}</td></tr>`).join('')||'<tr><td colspan="4" class="empty">No staff profiles yet.</td></tr>'}</tbody></table></div></section><section class="panel"><div class="panel-head"><div><h3>Create invitation</h3><p class="panel-sub">Invite a staff member to register</p></div></div><div class="panel-body"><form id="inviteForm"><label>Staff email<input class="field" type="email" name="email" required></label><label>Role<select class="field" name="role"><option value="warden">Warden</option><option value="accountant">Accountant</option><option value="messManager">Mess Manager</option></select></label><button class="btn primary" style="margin-top:15px" type="submit">Generate invitation</button></form><div id="inviteResult" class="message"></div><p class="fine">Give the invitation code and Hostel ID only to the intended staff member.</p></div></section></div>`;$('#inviteForm').onsubmit=async e=>{e.preventDefault();const f=new FormData(e.currentTarget),email=f.get('email').trim().toLowerCase(),role=f.get('role'),code='HP-'+Math.random().toString(36).slice(2,8).toUpperCase();await setDoc(doc(db,'hostels',profile.hostelId,'invitations',code),{email,role,used:false,hostelId:profile.hostelId,createdBy:uid,createdAt:serverTimestamp()});$('#inviteResult').textContent=`Invitation code: ${code} · Share with ${email}`;};}
-async function settings(){if(ROLE!=='admin')return;const host=$('#mainContent');host.innerHTML=`<section class="panel"><div class="panel-head"><h3>Hostel settings</h3></div><div class="panel-body"><div class="alert">Hostel ID is permanent and cannot be changed here. Only the owner admin can edit the hostel name.</div><form id="settingsForm"><label>Hostel name<input class="field" name="hostelName" value="${esc(profile.hostelName)}" required></label><p class="fine">Hostel ID: <b>${esc(profile.hostelId)}</b> — share it with your staff, students and parents when they register.</p><button class="btn primary" style="margin-top:14px">Save hostel name</button></form><div id="settingsMsg" class="message"></div></div></section>`;$('#settingsForm').onsubmit=async e=>{e.preventDefault();const name=new FormData(e.currentTarget).get('hostelName').trim();await updateDoc(doc(db,'hostels',profile.hostelId),{hostelName:name,updatedAt:serverTimestamp()});profile.hostelName=name;await updateDoc(doc(db,'users',uid),{hostelName:name});$('#brandName').textContent=name;$('#settingsMsg').textContent='Hostel name updated.';};}
-async function reports(){const host=$('#mainContent');let out='';for(const k of permissions[ROLE]||[]){if(!tables[k])continue;const r=await readCol(k);out+=`<tr><td>${esc(tables[k].label)}</td><td>${r.length}</td><td><button class="btn-sm" data-report="${k}">Export CSV</button></td></tr>`;}host.innerHTML=`<section class="panel"><div class="panel-head"><div><h3>Reports & exports</h3><p class="panel-sub">Export the records your role is allowed to access.</p></div></div><div class="table-wrap"><table><thead><tr><th>REPORT</th><th>RECORD COUNT</th><th>EXPORT</th></tr></thead><tbody>${out}</tbody></table></div></section>`;host.querySelectorAll('[data-report]').forEach(b=>b.onclick=async()=>csvExport(await readCol(b.dataset.report),tables[b.dataset.report].label));}
-async function myProfile(){let p=profile;if(ROLE==='parent'&&profile.parentStudentUid){const s=await getDoc(doc(db,'hostels',profile.hostelId,'students',profile.parentStudentUid));p=s.exists()?s.data():null;}else if(ROLE==='student'){const s=await getDoc(doc(db,'hostels',profile.hostelId,'students',uid));p=s.exists()?s.data():profile;}const host=$('#mainContent');host.innerHTML=`<section class="panel"><div class="panel-head"><h3>${ROLE==='parent'?'Linked student profile':'My profile'}</h3></div><div class="panel-body">${p?`<div class="grid-two"><div><p><b>Name</b><br>${esc(p.name||p.studentName||'Not provided')}</p><p><b>Student ID</b><br>${esc(p.studentId||p.id||uid)}</p><p><b>Room</b><br>${esc(p.room||'Not assigned')}</p></div><div><p><b>Hostel</b><br>${esc(profile.hostelName)}</p><p><b>Account email</b><br>${esc(profile.email)}</p><p><b>Role</b><br>${esc(ROLE)}</p></div></div>`:'<div class="alert">No linked student record was found. Contact your hostel admin to verify the parent-student link.</div>'}</div></section>`;}
-async function myFees(){const rows=await readCol('fees');const mine=ROLE==='student'?rows.filter(x=>x.studentUid===uid||x.studentUid===profile.studentId):rows.filter(x=>x.studentUid===profile.parentStudentUid);$('#mainContent').innerHTML=`<section class="panel"><div class="panel-head"><h3>Fee statement</h3></div><div class="table-wrap"><table><thead><tr><th>TYPE</th><th>PERIOD</th><th>AMOUNT</th><th>PAID</th><th>BALANCE</th><th>STATUS</th></tr></thead><tbody>${mine.map(x=>`<tr><td>${esc(x.feeType)}</td><td>${esc(x.month||x.dueDate||'—')}</td><td>${money(x.amount)}</td><td>${money(x.paid)}</td><td>${money(Math.max(0,Number(x.amount||0)-Number(x.paid||0)))}</td><td>${esc(x.status)}</td></tr>`).join('')||'<tr><td colspan="6" class="empty">No fee records linked to your account yet.</td></tr>'}</tbody></table></div></section>`;}
-function csvExport(rows,label){if(!rows.length){alert('No records to export.');return;}const cols=[...new Set(rows.flatMap(r=>Object.keys(r)))].filter(x=>!['id','hostelId'].includes(x));const q=v=>'"'+String(v??'').replace(/"/g,'""')+'"';const csv=[cols.map(q).join(','),...rows.map(r=>cols.map(c=>q(r[c] instanceof Object?'':r[c])).join(','))].join('
-');const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8;'}));a.download=label.toLowerCase().replace(/[^a-z0-9]+/g,'-')+'.csv';a.click();URL.revokeObjectURL(a.href);}
+
+import {
+  getAuth,
+  onAuthStateChanged,
+  signOut
+} from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
+
+import {
+  getFirestore,
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  addDoc,
+  setDoc,
+  updateDoc,
+  deleteDoc,
+  query,
+  where,
+  orderBy,
+  limit,
+  serverTimestamp
+} from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js';
+
+import {
+  firebaseConfig,
+  CONFIGURED
+} from './firebase-config.js';
+
+const ROLE = document.body.dataset.role;
+const $ = s => document.querySelector(s);
+
+let app, auth, db, profile, uid;
+
+const esc = v =>
+  String(v ?? '').replace(/[&<>"']/g, c => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;'
+  }[c]));
+
+const configNotice = () => {
+  if (!CONFIGURED) {
+    $('#mainContent').innerHTML = `
+      <div class="config-banner">
+        <b>Firebase setup required.</b>
+        Open <code>js/firebase-config.js</code>
+        and fill the Web App configuration fields.
+        Then enable Email/Password Authentication,
+        create Firestore, and deploy
+        <code>firestore.rules</code>.
+      </div>`;
+    return true;
+  }
+
+  return false;
+};
+
+const meta = {
+  admin: {
+    title: 'Admin Console',
+    desc: 'Complete hostel operations and organization settings',
+    nav: [
+      ['overview', '▦', 'Overview'],
+      ['users', '♙', 'User approvals'],
+      ['students', '♟', 'Students'],
+      ['rooms', '▤', 'Rooms'],
+      ['fees', '＄', 'Fees & payments'],
+      ['mess', '♨', 'Mess management'],
+      ['inventory', '▣', 'Inventory'],
+      ['expenses', '↗', 'Expenses'],
+      ['staff', '♧', 'Staff & invitations'],
+      ['complaints', '☏', 'Complaints'],
+      ['announcements', '✦', 'Announcements'],
+      ['reports', '▥', 'Reports'],
+      ['settings', '⚙', 'Hostel settings']
+    ]
+  },
+
+  warden: {
+    title: 'Warden Panel',
+    desc: 'Admissions, rooms, attendance and student welfare',
+    nav: [
+      ['overview', '▦', 'Overview'],
+      ['students', '♟', 'Students'],
+      ['rooms', '▤', 'Rooms'],
+      ['attendance', '✓', 'Attendance'],
+      ['complaints', '☏', 'Complaints'],
+      ['announcements', '✦', 'Announcements']
+    ]
+  },
+
+  accountant: {
+    title: 'Accounts Desk',
+    desc: 'Fee collection, balances and expense tracking',
+    nav: [
+      ['overview', '▦', 'Overview'],
+      ['fees', '＄', 'Fees & payments'],
+      ['expenses', '↗', 'Expenses'],
+      ['reports', '▥', 'Financial reports']
+    ]
+  },
+
+  messManager: {
+    title: 'Mess Operations',
+    desc: 'Menu, meal records, stock and food expenses',
+    nav: [
+      ['overview', '▦', 'Overview'],
+      ['mess', '♨', 'Mess menu & meals'],
+      ['inventory', '▣', 'Inventory'],
+      ['expenses', '↗', 'Expenses']
+    ]
+  },
+
+  student: {
+    title: 'Student Portal',
+    desc: 'Your room, fees, mess and hostel requests',
+    nav: [
+      ['overview', '▦', 'Overview'],
+      ['myprofile', '♙', 'My profile'],
+      ['myfees', '＄', 'My fees'],
+      ['mess', '♨', 'Mess menu'],
+      ['complaints', '☏', 'My complaints'],
+      ['announcements', '✦', 'Announcements']
+    ]
+  },
+
+  parent: {
+    title: 'Parent Portal',
+    desc: 'Stay updated on your linked student',
+    nav: [
+      ['overview', '▦', 'Overview'],
+      ['myprofile', '♙', 'Student profile'],
+      ['myfees', '＄', 'Fees & payments'],
+      ['mess', '♨', 'Mess menu'],
+      ['complaints', '☏', 'Contact warden'],
+      ['announcements', '✦', 'Announcements']
+    ]
+  }
+};
+
+const tables = {
+  students: {
+    label: 'Students',
+    fields: [
+      ['name', 'Full name', 'text'],
+      ['studentId', 'Admission / Student ID', 'text'],
+      ['email', 'Email', 'email'],
+      ['phone', 'Phone', 'text'],
+      ['room', 'Room number', 'text'],
+      ['guardianName', 'Parent / guardian', 'text'],
+      ['guardianPhone', 'Guardian phone', 'text'],
+      ['admissionDate', 'Admission date', 'date'],
+      ['status', 'Status', 'select:active,inactive,pending']
+    ]
+  },
+
+  rooms: {
+    label: 'Rooms',
+    fields: [
+      ['roomNo', 'Room number', 'text'],
+      ['block', 'Block / floor', 'text'],
+      ['capacity', 'Capacity', 'number'],
+      ['occupied', 'Occupied beds', 'number'],
+      ['type', 'Room type', 'select:Standard,AC,Shared,Private'],
+      ['monthlyRent', 'Monthly rent', 'number'],
+      ['status', 'Status', 'select:Available,Full,Maintenance']
+    ]
+  },
+
+  fees: {
+    label: 'Fees & payments',
+    fields: [
+      ['studentUid', 'Student UID', 'text'],
+      ['studentName', 'Student name', 'text'],
+      ['feeType', 'Fee type', 'select:Tuition,Room,Mess,Admission,Other'],
+      ['amount', 'Amount', 'number'],
+      ['paid', 'Paid amount', 'number'],
+      ['dueDate', 'Due date', 'date'],
+      ['month', 'Month / period', 'text'],
+      ['status', 'Status', 'select:Unpaid,Partial,Paid']
+    ]
+  },
+
+  mess: {
+    label: 'Mess menu & meals',
+    fields: [
+      ['date', 'Date', 'date'],
+      ['breakfast', 'Breakfast', 'text'],
+      ['lunch', 'Lunch', 'text'],
+      ['dinner', 'Dinner', 'text'],
+      ['notes', 'Notes / allergens', 'text']
+    ]
+  },
+
+  inventory: {
+    label: 'Inventory',
+    fields: [
+      ['item', 'Item name', 'text'],
+      ['category', 'Category', 'text'],
+      ['quantity', 'Quantity', 'number'],
+      ['unit', 'Unit', 'text'],
+      ['reorderLevel', 'Reorder level', 'number'],
+      ['unitCost', 'Unit cost', 'number'],
+      ['supplier', 'Supplier', 'text']
+    ]
+  },
+
+  expenses: {
+    label: 'Expenses',
+    fields: [
+      ['date', 'Date', 'date'],
+      ['category', 'Category', 'select:Food,Maintenance,Utilities,Salary,Medical,Other'],
+      ['description', 'Description', 'text'],
+      ['amount', 'Amount', 'number'],
+      ['paidTo', 'Paid to', 'text'],
+      ['receiptNo', 'Receipt / reference', 'text']
+    ]
+  },
+
+  complaints: {
+    label: 'Complaints & requests',
+    fields: [
+      ['subject', 'Subject', 'text'],
+      ['category', 'Category', 'select:Room,Maintenance,Mess,Fees,Security,Other'],
+      ['description', 'Description', 'textarea'],
+      ['priority', 'Priority', 'select:Low,Normal,High'],
+      ['status', 'Status', 'select:Open,In progress,Resolved']
+    ]
+  },
+
+  announcements: {
+    label: 'Announcements',
+    fields: [
+      ['title', 'Title', 'text'],
+      ['body', 'Message', 'textarea'],
+      ['audience', 'Audience', 'select:Everyone,Students,Parents,Staff'],
+      ['expiresAt', 'Expiry date', 'date']
+    ]
+  },
+
+  attendance: {
+    label: 'Attendance',
+    fields: [
+      ['studentUid', 'Student UID', 'text'],
+      ['studentName', 'Student name', 'text'],
+      ['date', 'Date', 'date'],
+      ['status', 'Attendance', 'select:Present,Absent,Leave'],
+      ['notes', 'Notes', 'text']
+    ]
+  },
+
+  staff: {
+    label: 'Staff & invitations',
+    fields: [
+      ['name', 'Staff name', 'text'],
+      ['email', 'Staff email', 'email'],
+      ['role', 'Role', 'select:warden,accountant,messManager'],
+      ['inviteCode', 'Invitation code', 'text'],
+      ['status', 'Status', 'select:active,pending,disabled']
+    ]
+  }
+};
+
+const permissions = {
+  admin: Object.keys(tables),
+  warden: [
+    'students',
+    'rooms',
+    'attendance',
+    'complaints',
+    'announcements'
+  ],
+  accountant: ['fees', 'expenses'],
+  messManager: ['mess', 'inventory', 'expenses'],
+  student: ['complaints', 'announcements', 'mess'],
+  parent: ['complaints', 'announcements', 'mess']
+};
