@@ -2,12 +2,12 @@
 // This file intentionally leaves credentials blank for your own Firebase project.
 // Firebase web config is not a server secret; secure data with Authentication and Firestore Rules.
 export const firebaseConfig = {
-  apiKey: "",
-  authDomain: "",
-  projectId: "",
-  appId: "",
-  messagingSenderId: "",
-  storageBucket: ""
+  apiKey: "AIzaSyD32PiCYM--tt27soguMTWbWEI8TdwPWRU",
+  authDomain: "hostelpro-eb9ea.firebaseapp.com",
+  projectId: "hostelpro-eb9ea",
+  appId: "1:631259206007:web:ff2d206c1111f098c6d172",
+  messagingSenderId: "631259206007",
+  storageBucket: "hostelpro-eb9ea.firebasestorage.app"
 };
 export const FIREBASE_SDK_VERSION = "10.14.1";
 export const isFirebaseConfigured = () =>
